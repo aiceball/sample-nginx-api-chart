@@ -1,0 +1,94 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: internal-nginx
+  labels:
+    app: internal-nginx
+spec:
+{{- if not .Values.ingress.internalNginx.autoscaling.enabled }}
+  replicas: {{ required "error" .Values.ingress.internalNginx.replicas }}
+{{- end }}
+{{- if .Values.ingress.internalNginx.updateStrategy }}
+  strategy: {{- .Values.ingress.internalNginx.updateStrategy | toYaml | nindent 4 }}
+{{- end }}
+  selector:
+    matchLabels: {{- include "core-api.pod-immutable-labels" . | nindent 6 }}
+      app: internal-nginx
+  template:
+    metadata:
+      labels: {{- include "core-api.pod-immutable-labels" . | nindent 8 }}
+        app: internal-nginx
+      annotations:
+        configmap.reloader.stakater.com/reload: "internal-nginx"
+    spec:
+{{- if or .Values.ingress.internalNginx.nodeAffinity .Values.ingress.internalNginx.podAffinity .Values.ingress.internalNginx.podAntiAffinity }}
+      affinity:
+  {{- if .Values.ingress.internalNginx.nodeAffinity }}
+        nodeAffinity: {{- include "core-api.tplvalue" (dict "value" .Values.ingress.internalNginx.nodeAffinity "context" .) | nindent 10 }}
+  {{- end -}}
+  {{- if .Values.ingress.internalNginx.podAffinity }}
+        podAffinity: {{- .Values.ingress.internalNginx.podAffinity | toYaml | nindent 10 }}
+  {{- end -}}
+  {{- if .Values.ingress.internalNginx.podAntiAffinity }}
+        podAntiAffinity: {{- include "core-api.tplvalue" (dict "value" .Values.ingress.internalNginx.podAntiAffinity "context" .) | nindent 10 }}
+  {{- end }}
+{{- end }}
+      priorityClassName: {{ .Values.ingress.internalNginx.priorityClassName }}
+      containers:
+        - name:  internal-nginx
+          image: "{{ .Values.ingress.internalNginx.nginx.imageName }}:{{ .Values.ingress.internalNginx.nginx.imageTag }}"
+          ports:
+            - containerPort: 8000
+              name: http
+            - containerPort: 8001
+              name: health
+{{- if .Values.ingress.internalNginx.nginx.livenessProbe.enabled }}
+          livenessProbe:
+            initialDelaySeconds: {{ .Values.ingress.internalNginx.nginx.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.ingress.internalNginx.nginx.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.ingress.internalNginx.nginx.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.ingress.internalNginx.nginx.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.ingress.internalNginx.nginx.livenessProbe.failureThreshold }}
+            httpGet:
+              port: health
+              path: /nginx-health
+{{- end }}
+{{- if .Values.ingress.internalNginx.nginx.readinessProbe.enabled }}
+          readinessProbe:
+            initialDelaySeconds: {{ .Values.ingress.internalNginx.nginx.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.ingress.internalNginx.nginx.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.ingress.internalNginx.nginx.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.ingress.internalNginx.nginx.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.ingress.internalNginx.nginx.readinessProbe.failureThreshold }}
+            httpGet:
+              port: health
+              path: /nginx-health
+{{- end }}
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /opt/bitnami/nginx/conf
+              readOnly: true
+          lifecycle:
+            preStop:
+              exec:
+                command: [
+                  "sh", "-c",
+                  # Introduce a delay to the shutdown sequence to wait for the
+                  # pod eviction event to propagate. Then, gracefully shutdown
+                  # nginx.
+                  "sleep 10 && nginx -s quit",
+                ]
+          resources: {{- .Values.ingress.internalNginx.nginx.resources | toYaml | nindent 12 }}
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: internal-nginx
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+      imagePullSecrets:
+{{- range $.Values.global.imagePullSecrets }}
+        - name: {{ . }}
+{{- end }}
+...

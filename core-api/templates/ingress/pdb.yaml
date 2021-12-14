@@ -1,0 +1,14 @@
+{{- if .Values.ingress.internalNginx.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: internal-nginx
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "core-api.labels" . | nindent 4 }}
+    app: internal-nginx
+spec:
+  selector:
+    matchLabels:
+      app: internal-nginx
+  minAvailable: {{ required "missing ingress.internalNginx.pdb.minAvailable" .Values.ingress.internalNginx.pdb.minAvailable }}
+{{- end }}

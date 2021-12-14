@@ -1,0 +1,53 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: internal-nginx
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "core-api.labels" . | nindent 4 }}
+data:
+  # language=conf
+  nginx.conf: |
+    worker_processes  1;
+
+    # Enable below to debug
+    #error_log /dev/stdout info;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        # 14400s = 4h
+        # Don't use IPv6 resolver because it causes sporadic high latency.
+        # Also, as of 2021-09-24:
+        #   Azure VMs cannot connect over IPv6 to other VMs, other Azure services,
+        #   or on-premises devices. They can only communicate with the Azure load balancer over IPv6. However,
+        #   they can communicate with these other resources using IPv4.
+        # So, this might also be a reason for IPv6 not working.
+        resolver kube-dns.kube-system.svc.cluster.local 10.0.40.10 valid=14400s ipv6=off;
+
+        server {
+            # on a bitnami-nginx ports <1000 are denied: https://github.com/bitnami/bitnami-docker-nginx/issues/96
+            listen 0.0.0.0:8001 default_server;
+            location /nginx-health {
+                access_log off;
+                return 200 "healthy\n";
+            }
+        }
+
+        server {
+            # on a bitnami-nginx ports <1000 are denied: https://github.com/bitnami/bitnami-docker-nginx/issues/96
+            listen 0.0.0.0:8000;
+            server_name _;
+
+            client_body_buffer_size 40m;
+            client_max_body_size 50m;
+            client_body_temp_path /tmp/nginx_client_temp;
+
+            location ~ ^/(?<myvar>.*)$ {
+                proxy_pass http://{{ printf "api.%s.svc.cluster.local" .Release.Namespace }}:80/$myvar$is_args$args;
+            }
+        }
+    }
+...

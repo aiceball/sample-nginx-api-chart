@@ -1,0 +1,55 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "core-api.labels" . | nindent 4 }}
+    app: api
+spec:
+  replicas: {{ .Values.api.api.replicas }}
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app: api
+      annotations:
+        "cluster-autoscaler.kubernetes.io/safe-to-evict": "true"
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.api.api.imageName }}:{{ .Values.api.api.imageTag }}"
+          ports:
+            - name: http
+              containerPort: 80
+{{- if .Values.api.api.livenessProbe.enabled }}
+          livenessProbe:
+            initialDelaySeconds: {{ .Values.api.api.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.api.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.api.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.api.api.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.api.api.livenessProbe.failureThreshold }}
+            httpGet:
+              port: 80
+              path: /liveness
+{{- end }}
+{{- if .Values.api.api.readinessProbe.enabled }}
+          readinessProbe:
+            initialDelaySeconds: {{ .Values.api.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.api.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.api.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.api.api.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.api.api.readinessProbe.failureThreshold }}
+            httpGet:
+              port: 80
+              path: /readiness
+{{- end }}
+          resources: {{- .Values.api.api.resources | toYaml | nindent 12 }}
+      imagePullSecrets:
+{{- range $.Values.global.imagePullSecrets }}
+        - name: {{ . }}
+{{- end }}
+...

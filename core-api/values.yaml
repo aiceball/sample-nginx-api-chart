@@ -1,0 +1,210 @@
+global:
+  # Keep in sync with .containerRegistryCredentials
+  imagePullSecrets:
+    - aiteamcontainerregistry
+    - dockerhub
+nameOverride: ""
+fullnameOverride: ""
+
+deploymentLabels:
+  cloud: azure
+  location: eastus
+  environment: prod
+  cluster: cluster-1
+  subEnvironment: dev-cluster-debug
+  baseDomain: fake.domain.ca
+  isPrimaryProd: false
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+
+## api
+##
+api:
+  api:
+    replicas: 1
+    imageName: nginx
+    imageTag: latest
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        # These high limits are to handle sudden spikes before scaling up
+        cpu: 200m
+        memory: 128Mi
+    livenessProbe:
+      enabled: false
+      initialDelaySeconds: 150
+      periodSeconds: 10
+      timeoutSeconds: 10
+      successThreshold: 1
+      failureThreshold: 3
+    readinessProbe:
+      enabled: false
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 5
+      successThreshold: 1
+      failureThreshold: 10
+
+## nginx-ingress-controller
+##
+nginx-ingress-controller:
+  priorityClassName: medium-priority
+  replicaCount: 1
+  pdb:
+    create: true
+    minAvailable: 65%
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 20%
+  resources:
+    requests:
+      cpu: 20m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 1024Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 2
+    targetCPU: 90
+    targetMemory: 90
+  nodeSelector:
+    beta.kubernetes.io/os: linux
+  publishService:
+    enabled: true
+  service:
+    externalTrafficPolicy: Local
+  defaultBackend:
+    nodeSelector:
+      beta.kubernetes.io/os: linux
+    resources:
+      requests:
+        cpu: 5m
+        memory: 16Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+  # We set high cpu/mem limits for linkerd to handle spike before scale out
+  podAnnotations: |
+    "cluster-autoscaler.kubernetes.io/safe-to-evict": "true"
+  proxySetHeaders:
+    X-Forwarded-Proto: $scheme
+    X-Forwarded-Host: $host
+    X-Forwarded-Port: $server_port
+    X-Forwarded-For: $proxy_add_x_forwarded_for
+    X-Real-IP: $remote_addr
+    X-Request-Uri: $request_uri
+  addHeaders:
+    Access-Control-Expose-Headers: Location
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 10s
+  affinity: |
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: kubernetes.azure.com/mode
+                operator: In
+                values:
+                  - system
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: "topology.kubernetes.io/zone"
+            labelSelector:
+              matchLabels: {{- include "common.labels.matchLabels" . | nindent 12 }}
+                app.kubernetes.io/component: controller
+        - weight: 90
+          podAffinityTerm:
+            topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels: {{- include "common.labels.matchLabels" . | nindent 12 }}
+                app.kubernetes.io/component: controller
+
+## Ingress
+##
+ingress:
+  ## TLS/SSL
+  ##
+  # tlsCertAndKeyPfxBase64encodedSecretName:
+
+  ## Internal nginx
+  ##
+  internalNginx:
+    autoscaling:
+      enabled: true
+      # Keep aligned with pdb.minAvailable
+      minReplicas: 1
+      maxReplicas: 3
+      targetAverageCpuUtilizationPercentage: 100
+      targetMemoryUtilizationPercentage: 100
+    priorityClassName: medium-priority
+    replicas: 1
+    nodeAffinity: {}
+    podAffinity: {}
+    podAntiAffinity: |
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: "topology.kubernetes.io/zone"
+            labelSelector:
+              matchLabels: {{- include "core-api.pod-immutable-labels" . | nindent 10 }}
+                app: "internal-nginx"
+        - weight: 90
+          podAffinityTerm:
+            topologyKey: "kubernetes.io/hostname"
+            labelSelector:
+              matchLabels: {{- include "core-api.pod-immutable-labels" . | nindent 10 }}
+                app: "internal-nginx"
+    pdb:
+      enabled: true
+      minAvailable: 65%
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 25%
+        maxUnavailable: 20%
+    nginx:
+      # https://github.com/bitnami/bitnami-docker-nginx/releases
+      imageName: bitnami/nginx
+      imageTag: 1.21.3-debian-10-r1
+      resources:
+        requests:
+          cpu: 20m
+          memory: 128Mi
+        limits:
+          # High limits to handle spike before scale out
+          cpu: 500m
+          memory: 2Gi
+      livenessProbe:
+        enabled: true
+        initialDelaySeconds: 60
+        periodSeconds: 10
+        timeoutSeconds: 10
+        successThreshold: 1
+        failureThreshold: 10
+      readinessProbe:
+        enabled: true
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 5
+        successThreshold: 1
+        failureThreshold: 10

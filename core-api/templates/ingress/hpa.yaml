@@ -1,0 +1,32 @@
+{{ with .Values.ingress.internalNginx }}
+  {{- if .autoscaling.enabled -}}
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: internal-nginx
+  namespace: {{ $.Release.Namespace }}
+  labels: {{- include "core-api.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: internal-nginx
+  minReplicas: {{ required "error" .autoscaling.minReplicas }}
+  maxReplicas: {{ required "error" .autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ required "error" .autoscaling.targetAverageCpuUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ required "error" .autoscaling.targetMemoryUtilizationPercentage }}
+...
+  {{- end -}}
+{{- end -}}

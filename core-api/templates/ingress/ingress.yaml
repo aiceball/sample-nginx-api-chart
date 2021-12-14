@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "ingress"
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "core-api.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "*"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "40m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/use-gzip: "true"
+spec:
+  ingressClassName: nginx
+{{/*TODO: inject TLS here*/}}
+{{/*  tls:*/}}
+{{/*    - hosts:*/}}
+{{/*{{- if .Values.deploymentLabels.isPrimaryProd }}*/}}
+{{/*        - {{ include "core-api.primaryProdIngressHost" . }}*/}}
+{{/*{{- end }}*/}}
+{{/*        - {{ include "core-api.ingressHost" . }}*/}}
+{{/*      secretName: aks-tls-ingress*/}}
+  rules:
+{{- if .Values.deploymentLabels.isPrimaryProd }}
+    - host: {{ include "core-api.primaryProdIngressHost" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: internal-nginx
+                port:
+                  number: 80
+{{- end }}
+    - host: {{ include "core-api.ingressHost" . }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: internal-nginx
+                port:
+                  number: 80
