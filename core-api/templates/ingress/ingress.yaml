@@ -40,7 +40,14 @@ spec:
     - host: {{ include "core-api.ingressHost" . }}
       http:
         paths:
-          - path: /
+          - path: /swagger/
+            pathType: Prefix
+            backend:
+              service:
+                name: internal-nginx
+                port:
+                  number: 80
+          - path: /api
             pathType: Prefix
             backend:
               service:

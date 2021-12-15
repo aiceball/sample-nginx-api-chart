@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swagger
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "core-api.labels" . | nindent 4 }}
+    app: swagger
+spec:
+  replicas: {{ .Values.swagger.replicas }}
+  selector:
+    matchLabels:
+      app: swagger
+  template:
+    metadata:
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app: swagger
+      annotations:
+        "cluster-autoscaler.kubernetes.io/safe-to-evict": "true"
+    spec:
+      containers:
+        - name: swagger
+          image: "{{ .Values.swagger.imageName }}:{{ .Values.swagger.imageTag }}"
+          ports:
+            - name: http
+              containerPort: 8080
+{{- if .Values.swagger.livenessProbe.enabled }}
+          livenessProbe:
+            initialDelaySeconds: {{ .Values.api.api.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.api.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.api.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.api.api.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.api.api.livenessProbe.failureThreshold }}
+            httpGet:
+              port: 8080
+              path: /liveness
+{{- end }}
+{{- if .Values.swagger.readinessProbe.enabled }}
+          readinessProbe:
+            initialDelaySeconds: {{ .Values.api.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.api.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.api.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.api.api.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.api.api.readinessProbe.failureThreshold }}
+            httpGet:
+              port: 8080
+              path: /readiness
+{{- end }}
+          resources: {{- .Values.swagger.resources | toYaml | nindent 12 }}
+          env:
+          - name: CONFIG_URL
+            value: {{ printf "%s/swagger" (include "core-api.ingressHost" .) }}
+#          - name: SWAGGER_BASE_PATH
+          - name: SWAGGER_HOST
+            value: {{ printf "%s/swagger" (include "core-api.ingressHost" .) }}
+#          - name: SWAGGER_BASE_PATH
+#            value: "v1"
+          - name: SWAGGER_URL
+            value: {{ printf "%s/swagger" (include "core-api.ingressHost" .) }}
+      imagePullSecrets:
+{{- range $.Values.global.imagePullSecrets }}
+        - name: {{ . }}
+{{- end }}
+...

@@ -1,18 +1,17 @@
 global:
   # Keep in sync with .containerRegistryCredentials
   imagePullSecrets:
-    - aiteamcontainerregistry
     - dockerhub
 nameOverride: ""
 fullnameOverride: ""
 
 deploymentLabels:
-  cloud: azure
-  location: eastus
-  environment: prod
+  cloud: aws
+  location: us-east-1
+  environment: dev
   cluster: cluster-1
-  subEnvironment: dev-cluster-debug
-  baseDomain: fake.domain.ca
+  subEnvironment: development
+  baseDomain: aerial-tech.net
   isPrimaryProd: false
 
 serviceAccount:
@@ -55,10 +54,37 @@ api:
       successThreshold: 1
       failureThreshold: 10
 
+swagger:
+    replicas: 1
+    imageName: swaggerapi/petstore
+    imageTag: latest
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        # These high limits are to handle sudden spikes before scaling up
+        cpu: 200m
+        memory: 512Mi
+    livenessProbe:
+      enabled: false
+      initialDelaySeconds: 150
+      periodSeconds: 10
+      timeoutSeconds: 10
+      successThreshold: 1
+      failureThreshold: 3
+    readinessProbe:
+      enabled: false
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      timeoutSeconds: 5
+      successThreshold: 1
+      failureThreshold: 10
+
 ## nginx-ingress-controller
 ##
 nginx-ingress-controller:
-  priorityClassName: medium-priority
+#  priorityClassName: medium-priority
   replicaCount: 1
   pdb:
     create: true
@@ -112,18 +138,9 @@ nginx-ingress-controller:
   metrics:
     enabled: true
     serviceMonitor:
-      enabled: true
+      enabled: false
       interval: 10s
   affinity: |
-    nodeAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 1
-          preference:
-            matchExpressions:
-              - key: kubernetes.azure.com/mode
-                operator: In
-                values:
-                  - system
     podAntiAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
         - weight: 100
@@ -156,7 +173,7 @@ ingress:
       maxReplicas: 3
       targetAverageCpuUtilizationPercentage: 100
       targetMemoryUtilizationPercentage: 100
-    priorityClassName: medium-priority
+#    priorityClassName: medium-priority
     replicas: 1
     nodeAffinity: {}
     podAffinity: {}

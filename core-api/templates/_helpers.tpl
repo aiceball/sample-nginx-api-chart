@@ -81,7 +81,7 @@ Primary prod host for ingress
 Secondary host for ingress
 */}}
 {{- define "core-api.ingressHost" -}}
-  {{- printf "%s.%s.%s" .Values.deploymentLabels.subEnvironment .Values.deploymentLabels.location .Values.deploymentLabels.baseDomain -}}
+  {{- printf "%s.%s.%s" .Values.deploymentLabels.location .Values.deploymentLabels.subEnvironment .Values.deploymentLabels.baseDomain -}}
 {{- end -}}
 
 {{/*
